@@ -81,7 +81,6 @@ def adminLogin():
 @app.route('/admin/check', methods=["POST"])
 def adminLoginCheck():
     data = request.form
-    print(data)
     if data["username"] == "admin" and data["password"] == "123":
         session["admin"] = True
         return redirect(url_for('adminNews'))
