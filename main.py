@@ -190,7 +190,7 @@ def adminFeedback():
             db.close()
         except:
             feedbackdb = []
-        return render_template('adminFeedback.html',feedbackdb=feedbackdb)
+        return render_template('adminFeedback.html',feedbackdb=feedbackdb[::-1])
     else:
         return redirect(url_for('adminLogin'))
 
