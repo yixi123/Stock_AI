@@ -1,11 +1,12 @@
 {% extends "main.html" %}
+{% set active_page = "View Stock" %}
 
 {% block title %}Price Prediction by LSTM{% endblock %}
 
 {% block content %}
 <div class="container my-5 text-light ">
     <div>
-        <h1 style="padding-bottom:10px;">Bitcoin (Long-Short-Term-Memory Forecast) <img src="/static/Images/btc.png" height="50"></h1>
+        <h1 style="padding-bottom:10px;">Bitcoin <img src="/static/Images/btc.png" height="50"> (Long-Short-Term-Memory Forecast)</h1>
         <div class="row">
             <div class="col-1"></div>
             <div class="col-10 border border-warning text-center" style="background-color:rgba(255, 193, 7, 0.15);">

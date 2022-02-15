@@ -1,10 +1,15 @@
 {% extends "main.html" %}
-{% set active_page = "View Flair News" %}
+{% set active_page = "View News" %}
 
 {% block title %}News{% endblock %}
 
 {% block content %}
 <!-- Put your html codes here! -->
+<div class="p-3 mr-3 text-light float-right">
+    <form action="/viewNews" method="get">
+        <button type="submit" class="btn btn-outline-info">Swap to Text Classification</button>
+    </form>
+</div>
 <div class="container p-3 my-5 text-light">
     <h1>Flair News on cryptocurrency</h1>
 </div>
