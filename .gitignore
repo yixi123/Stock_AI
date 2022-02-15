@@ -4,6 +4,7 @@ articles.db.dat
 articles.db.dir
 best-model.pt
 final-model.pt
+/models/arima_model.pkl
 __pycache__/main.cpython-37.pyc
 
 __pycache__/main.cpython-37.pyc

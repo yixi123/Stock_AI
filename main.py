@@ -4,6 +4,7 @@ from importlib_metadata import metadata
 from multiprocessing import connection
 from time import strftime
 from flask import Flask, jsonify, render_template, redirect, url_for, request, session
+from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from newsapi.newsapi_client import NewsApiClient
 from dateutil.relativedelta import relativedelta
@@ -27,6 +28,7 @@ import models.loadmodels as loadmodels
 import config
 
 app = Flask(__name__)
+CORS(app)
 engine = db.create_engine('mysql://admin:eu866WCm6ipb@112.199.252.164:3306/ai_project')
 connection = engine.connect()
 metadata = db.MetaData()
@@ -158,7 +160,11 @@ def adminRefreshNews():
 
 @app.route('/admin_addNews', methods=['POST', 'GET'])
 def admin_addNews():
-    return render_template('admin_addNews.html')
+    if session.get("admin"):
+        return render_template('admin_addNews.html')
+    else:
+        return redirect(url_for('adminLogin'))
+    
 
 
 #---------------------------Feedback----------------------------
@@ -224,7 +230,7 @@ def timeAgo(datetimestring):
 # ------------------API reqs---------------------
 
 # background process happening without any refreshing
-@app.route('/background_process_test')
+@app.route('/background_process_test' , methods=['POST', 'GET'])
 def background_process_test():
     # Init
     newsapi = NewsApiClient(api_key='4d0eb542e2ca44a9af95172bad7d0221')
@@ -234,6 +240,7 @@ def background_process_test():
     today_date = datetime.today().strftime('%Y-%m-%d')
     five_days = datetime.today() + relativedelta(days=-4)
     three_months = datetime.today() + relativedelta(months=-1)
+    
     stock_data = web.DataReader(f'{crypto_currency}-{against_currency}', "yahoo", five_days, today_date)
 
     for i in range(len(stock_data)):
@@ -244,9 +251,13 @@ def background_process_test():
         ResultProxy = connection.execute(query, values_list)
 
     for page in range(1, 2):
-        all_articles = newsapi.get_everything(q='bitcoin',
-                                              from_param=three_months,
-                                              to=today_date,
+        print(today_date)
+        fromdate = request.json['fromdate']
+        todate = request.json['todate']
+        query = request.json['query']
+        all_articles = newsapi.get_everything(q=query,
+                                              from_param=fromdate,
+                                              to=todate,
                                               language='en',
                                               sort_by='relevancy',
                                               page=page)
@@ -266,7 +277,7 @@ def background_process_test():
             # OurNewDateFormat =  datetime.datetime.strptime  (publishedAt, '%Y-%m-%dT%H:%M:%SZ')
             # new_date = datetime.date.strftime(OurNewDateFormat,'%Y-%m-%d')
             # print(new_date)
-            classifier = TextClassifier.load('sentiment')
+            classifier = TextClassifier.load('final-model.pt')
             sentence = Sentence(description)
             classifier.predict(sentence)
 
@@ -288,15 +299,21 @@ def background_process_test():
 
 # ------------------Stock---------------------
 
-@app.route('/viewStock', methods=["GET"])
+@app.route('/viewStock', methods=["GET", "POST"])
 def viewStock():
+    day = 5
+    try:
+        day = request.json["days"]
+    except:
+        None
     results = connection.execute(db.select([stock_table])).fetchall()
+    news_result = connection.execute(db.select([news_table])).fetchall()
 
     # scaler = MinMaxScaler(feature_range=(0, 1)
     # scaled_data = scaler.fit_transform([result[1] for result in results].reshape(-1, 1))
 
     labels = [str(result[0]) for result in results]
-    labels = labels + [str(datetime.strftime((datetime.today() + relativedelta(days=i)), '%Y-%m-%d')) for i in range(0, 5)]
+    labels = labels + [str(datetime.strftime((datetime.today() + relativedelta(days=i)), '%Y-%m-%d')) for i in range(0, day)]
 
     model = loadmodels.load_arima()
 
@@ -306,7 +323,7 @@ def viewStock():
     test = np.array(test)
     preds = []
 
-    for i in range(5):
+    for i in range(day):
         t_forecast = []
         t_forecast.append(model.predict(n_periods=len([test[0][i:i + 5]]), X=[test[0][i:i + 5]]))
         t_forecast = np.array(t_forecast)
@@ -314,18 +331,32 @@ def viewStock():
         preds.append(t_forecast[0])
     # preds = scaler.inverse_transform(preds)
     # preds = scaler.inverse_transform(test)
-    results = connection.execute(db.select([stock_table])).fetchall()
-    return render_template('viewStock.html', values=test, max=200, labels=labels)
+
+    result = round((test[0][-1] - test[0][4]) / test[0][4], 3)
+    if request.method == "POST":
+        data = {"values": test.tolist(), "labels": labels, "result": result}
+        data = jsonify(data)
+        data.headers.add("Access-Control-Allow-Origin", '*')
+        return data
+
+    return render_template('viewStock.html', values=test.tolist(), max=200, labels=labels, result=result, news_result=news_result)
 
 
 
-@app.route('/viewLSTM', methods=["GET"])
+@app.route('/viewLSTM', methods=["GET", "POST"])
 def viewLSTM():
+    day = 5
+    try:
+        day = request.json["days"]
+    except:
+        None
     results = connection.execute(db.select([stock_table])).fetchall()
+    news_result = connection.execute(db.select([news_table])).fetchall()
+
     model = loadmodels.LSTMModel()
 
     labels = [str(result[0]) for result in results]
-    labels = labels + [str(datetime.strftime((datetime.today() + relativedelta(days=i)), '%Y-%m-%d')) for i in range(0, 5)]
+    labels = labels + [str(datetime.strftime((datetime.today() + relativedelta(days=i)), '%Y-%m-%d')) for i in range(0, day)]
     #print(labels)
 
     scaler = MinMaxScaler(feature_range=(0, 1))
@@ -334,11 +365,10 @@ def viewLSTM():
     test = [result for result in scaled_data]
     test=np.array(test)
     #print(test)
-    #[[0.71482802], [0.71745348], [0.66760452], [0.66274593], [0.61612082]]
     
     preds = []
 
-    for i in range(5):
+    for i in range(day):
         test_temp = [test[i:i + 5]]
         #print(test_temp)
         test_temp = np.array(test_temp)
@@ -353,8 +383,16 @@ def viewLSTM():
         preds.append(t_forecast[0])
     # y_te = scaler.inverse_transform(y_te)
     test = scaler.inverse_transform(test)
-    print(test)
-    return render_template("viewLSTM.html", values=test, max=200, labels=labels)
+    test = test.tolist()
+    result = round((test[-1][0] - test[4][0]) / test[4][0], 3)
+
+    if request.method == "POST":
+        data = {"values": test, "labels": labels, "result": result}
+        data = jsonify(data)
+        data.headers.add("Access-Control-Allow-Origin", '*')
+        return data
+
+    return render_template("viewLSTM.html", values=test, max=200, labels=labels, result=result, news_result=news_result)
 
 
 @app.route('/viewFlairNews')
@@ -369,7 +407,7 @@ def predict_Flair():
     input = request.json['text']
     print(input)
 
-    classifier = TextClassifier.load('sentiment')
+    classifier = TextClassifier.load('final-model.pt')
     sentence = Sentence(input)
     classifier.predict(sentence)
 
